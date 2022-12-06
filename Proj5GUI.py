@@ -468,7 +468,7 @@ class Proj5GUI( QMainWindow ):
 		h = QHBoxLayout()
 		h.addWidget( QLabel( '# Solutions:' ) )
 		h.addWidget( self.numSolutions )
-		h.addWidget( QLabel( 'Cost of tour:' ) )
+		h.addWidget( QLabel('Cost of tour:'))
 		h.addWidget( self.tourCost )
 		h.addWidget( QLabel( 'Solved in:' ) )
 		h.addWidget( self.solvedIn )
