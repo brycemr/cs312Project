@@ -173,7 +173,7 @@ class TSPSolver:
 				bssf = solution['soln']
 				bestCost = solution['cost']
 
-		for i in range(100*ncities):
+		if bestCost == np.inf:
 			solution = self.defaultRandomTour(time_allowance)
 			if bestCost > solution['cost']:
 				bssf = solution['soln']
@@ -289,7 +289,6 @@ class TSPSolver:
 
 		return reducedCostMatrix, additionalCost
 
-		
 	def fancy(self, time_allowance=60.0):
 		results = {}
 		cities = self._scenario.getCities()
@@ -299,6 +298,7 @@ class TSPSolver:
 		total_states = 1
 		pruned_states = 0
 		max_q_size = 0
+		MAX_ITERATIONS_WITHOUT_SWAP = ncities
 
 		curr_time = 0
 
@@ -314,10 +314,15 @@ class TSPSolver:
 		bestCost = initial_results['cost']
 
 		for i in range(10):
-			solution = self.defaultRandomTour(time_allowance)
+			solution = self.greedy(time_allowance)
 			if bestCost > solution['cost']:
 				bssf = solution['soln']
 				bestCost = solution['cost']
+
+		if bssf.cost == np.inf:
+			solution = self.defaultRandomTour(time_allowance)
+			bssf = solution['soln']
+			bestCost = solution['cost']
 
 		if bssf.cost < np.inf:
 			foundTour = True
@@ -329,33 +334,39 @@ class TSPSolver:
 		#print(costMatrix)
 
 		improvementFound = foundTour
+		numIterationsWithoutSwap = 0
+
 		while improvementFound:
 			improvementFound = False
 
 			self.printRoute(route)
 			for i in range(len(cities)):
+				if numIterationsWithoutSwap >= MAX_ITERATIONS_WITHOUT_SWAP:
+					#break
+					print("OOOPS")
+				numIterationsWithoutSwap += 1
 				# Iterate through all the edges
 				u = route[i]._index
-				print("\nu: " + str(u), end="  ")
+				#print("\nu: " + str(u), end="  ")
 				if i >= len(route)-1:
 					v = route[0]._index
 					v_route_index = i
 				else:
 					v = route[i+1]._index
 					v_route_index = i
-				print("v: " + str(v), end="  ")
+				#print("v: " + str(v), end="  ")
 
 				for j in range(len(cities)):
 					# Iterate through all the edges
 					a_route_index = j
 					a = route[j]._index
 					if a != u and a != v:
-						print("a: " + str(a), end="  ")
+						#print("a: " + str(a), end="  ")
 						if j >= len(route) - 1:
 							b = route[0]._index
 						else:
 							b = route[j + 1]._index
-						print("b: " + str(b), end="  ")
+						#print("b: " + str(b), end="  ")
 						if b != u and b != v:
 
 							# Verify that an edge exists from u -> a, backward from a -> v, and from v->b
@@ -366,99 +377,19 @@ class TSPSolver:
 							new_solution = TSPSolution(temp_route)
 
 							if new_solution.cost < bssf.cost:
-								print("BSSF UPDATED, old BSSF COST: " + str(bssf.cost))
-								print("Old Route: ", end="")
-								self.printRoute(route)
+								#print("BSSF UPDATED, old BSSF COST: " + str(bssf.cost))
+								#print("Old Route: ", end="")
+								#self.printRoute(route)
 								total_states += 1
 								bssf = TSPSolution(temp_route)
 								improvementFound = True
-								print("Swap Completed, new BSSF COST: " + str(bssf.cost))
-								print("New Route: ", end="")
+								numIterationsWithoutSwap = 0
+								#print("Swap Completed, new BSSF COST: " + str(bssf.cost))
+								#print("New Route: ", end="")
 								self.printRoute(temp_route)
 
 								break
 
-				if improvementFound:
-					break
-
-
-		print(route)
-
-		bssf = TSPSolution(route)
-
-		end_time = time.time()
-		results['cost'] = bssf.cost if foundTour else math.inf
-		results['time'] = end_time - start_time
-		results['count'] = count
-		results['soln'] = bssf
-		results['max'] = None
-		results['total'] = None
-		results['pruned'] = None
-
-		return results
-
-	def fancy(self, time_allowance=60.0):
-		results = {}
-		cities = self._scenario.getCities()
-		ncities = len(cities)
-		foundTour = False
-		count = 0
-		total_states = 1
-		pruned_states = 0
-		max_q_size = 0
-
-		curr_time = 0
-
-		costMatrix = np.empty((ncities, ncities))
-
-		# Initialize cost matrix
-		for i in range(ncities):
-			for j in range(ncities):
-				costMatrix[i, j] = cities[i].costTo(cities[j])
-
-		initial_results = self.greedy(time_allowance)
-		bssf = initial_results['soln']
-		bestCost = initial_results['cost']
-
-		for i in range(10):
-			solution = self.defaultRandomTour(time_allowance)
-			if bestCost > solution['cost']:
-				bssf = solution['soln']
-				bestCost = solution['cost']
-
-		if bssf.cost < np.inf:
-			foundTour = True
-
-		start_time = time.time()
-
-		route = bssf.route
-
-		#print(costMatrix)
-
-		improvementFound = foundTour
-		while improvementFound:
-			improvementFound = False
-			for u in range(len(cities)):
-				print("u: " + str(u), end="  ")
-				if u >= len(route)-1:
-					v = route[u+1-len(route)]
-				else:
-					v = route[u+1]
-				print("v: " + str(v), end="  ")
-				init_cost = costMatrix[u, v]
-				for wo in range(len(cities)):
-					print("wo: " + str(wo), end="  ")
-					if costMatrix[wo, u] < init_cost:
-						# perform edge swap if valid
-						if wo >= len(route) - 1:
-							alpha = route[wo + 1 - len(route)]
-						else:
-							alpha = route[wo + 1]
-						if costMatrix[v, alpha] < np.inf:
-							route = self.twoOptSwap(route, v, wo)
-							improvementFound = True
-							break
-						print("alpha: " + str(alpha))
 				if improvementFound:
 					break
 
