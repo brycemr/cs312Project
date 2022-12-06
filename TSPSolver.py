@@ -313,16 +313,18 @@ class TSPSolver:
 		bssf = initial_results['soln']
 		bestCost = initial_results['cost']
 
-		for i in range(10):
+		for i in range(ncities):
 			solution = self.greedy(time_allowance)
 			if bestCost > solution['cost']:
 				bssf = solution['soln']
 				bestCost = solution['cost']
 
-		if bssf.cost == np.inf:
-			solution = self.defaultRandomTour(time_allowance)
-			bssf = solution['soln']
-			bestCost = solution['cost']
+		#if bssf.cost == np.inf:
+		#	for i in range(3):
+		#		solution = self.defaultRandomTour(time_allowance)
+		#		if bestCost > solution['cost']:
+		#			bssf = solution['soln']
+		#			bestCost = solution['cost']
 
 		if bssf.cost < np.inf:
 			foundTour = True
@@ -339,7 +341,7 @@ class TSPSolver:
 		while improvementFound:
 			improvementFound = False
 
-			self.printRoute(route)
+			#self.printRoute(route)
 			for i in range(len(cities)):
 				if numIterationsWithoutSwap >= MAX_ITERATIONS_WITHOUT_SWAP:
 					#break
@@ -382,11 +384,12 @@ class TSPSolver:
 								#self.printRoute(route)
 								total_states += 1
 								bssf = TSPSolution(temp_route)
+								route = temp_route
 								improvementFound = True
 								numIterationsWithoutSwap = 0
 								#print("Swap Completed, new BSSF COST: " + str(bssf.cost))
 								#print("New Route: ", end="")
-								self.printRoute(temp_route)
+								#self.printRoute(route)
 
 								break
 
@@ -394,7 +397,7 @@ class TSPSolver:
 					break
 
 
-		print(route)
+		#print(route)
 
 		bssf = TSPSolution(route)
 
@@ -404,7 +407,7 @@ class TSPSolver:
 		results['count'] = count
 		results['soln'] = bssf
 		results['max'] = None
-		results['total'] = None
+		results['total'] = total_states
 		results['pruned'] = None
 
 		return results
