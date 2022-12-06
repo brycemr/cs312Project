@@ -299,6 +299,7 @@ class TSPSolver:
 		total_states = 1
 		pruned_states = 0
 		max_q_size = 0
+		MAX_ITERATIONS_WITHOUT_SWAP = 10
 
 		curr_time = 0
 
@@ -329,11 +330,16 @@ class TSPSolver:
 		#print(costMatrix)
 
 		improvementFound = foundTour
+		numIterationsWithoutSwap = 0
+
 		while improvementFound:
 			improvementFound = False
 
 			self.printRoute(route)
 			for i in range(len(cities)):
+				if numIterationsWithoutSwap >= MAX_ITERATIONS_WITHOUT_SWAP:
+					break
+				numIterationsWithoutSwap += 1
 				# Iterate through all the edges
 				u = route[i]._index
 				print("\nu: " + str(u), end="  ")
@@ -372,6 +378,7 @@ class TSPSolver:
 								total_states += 1
 								bssf = TSPSolution(temp_route)
 								improvementFound = True
+								numIterationsWithoutSwap = 0
 								print("Swap Completed, new BSSF COST: " + str(bssf.cost))
 								print("New Route: ", end="")
 								self.printRoute(temp_route)
