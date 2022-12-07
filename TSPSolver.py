@@ -17,6 +17,7 @@ import numpy as np
 from TSPClasses import *
 import heapq
 import copy
+import random
 import itertools
 
 
@@ -64,6 +65,8 @@ class TSPSolver:
 	# This algorithm runs in O(n^3) time as it finds the minimum edge
 	# in an nxn matrix for n edges. It runs in O(n^2) space complexity
 	# as it creates a nxn matrix.
+
+
 	def greedy(self, time_allowance=60.0):
 		results = {}
 		cities = self._scenario.getCities()
@@ -73,6 +76,8 @@ class TSPSolver:
 		count = 1
 		start_time = time.time()
 		route = []
+		numCities = len(cities)
+		edges = self.calcAllEdges(cities)
 
 		costMatrix = np.empty((ncities, ncities))
 
@@ -80,6 +85,10 @@ class TSPSolver:
 		for i in range(ncities):
 			for j in range(ncities):
 				costMatrix[i, j] = cities[i].costTo(cities[j])
+		bssf = None
+		count = 0
+		startIndex = 0
+		startCity = cities[startIndex]
 
 		# Find minimal edge length in cost matrix and add these cities to route
 		start_cities = np.where(costMatrix == np.amin(costMatrix))
@@ -103,7 +112,7 @@ class TSPSolver:
 
 		# Iterate through the graph, following the minimal edge that does not
 		# go to a city that has already been visited
-		for i in range(ncities-2):
+		for i in range(ncities - 2):
 			# Find minimal edge from current city
 			min = np.inf
 			next_city = -1
@@ -128,9 +137,47 @@ class TSPSolver:
 			current_city = next_city
 
 		bssf = TSPSolution(route)
+		start_time = time.time()
+		while startIndex < len(cities) - 1 and time.time() - start_time < time_allowance:
+			route = []
+			route.append(startCity)
+			routeCost = 0
+
+			startPoint = startCity
+			currCity = None
+			# keep going until we make a full cycle back to the starting city
+			while (currCity != startCity):
+				currCity = startPoint
+				currEdges = edges[currCity]
+
+				# find the smallest edge out of the current city
+				minEdge = self.getMinEdge(currEdges, route, numCities)
+				if minEdge == None:
+					break
+
+				# add the new city to the route and update vals
+				route.append(minEdge[0])
+				routeCost += minEdge[1]
+				startPoint = minEdge[0]
+				currCity = startPoint
+
+			# if we've made it back to the starting city, check that we've made a full cycle and everything connects
+			newBSSF = TSPSolution(route)
+			if newBSSF.cost != np.inf and len(route) == numCities:
+				count += 1
+				if bssf is None:
+					bssf = newBSSF
+				elif newBSSF.cost < bssf.cost:
+					bssf = newBSSF
+
+			# try starting with a new start city and repeat
+			startIndex += 1
+			startCity = cities[startIndex]
 
 		end_time = time.time()
 		results['cost'] = bssf.cost if foundTour else math.inf
+
+		results['cost'] = bssf.cost
 		results['time'] = end_time - start_time
 		results['count'] = count
 		results['soln'] = bssf
@@ -140,6 +187,32 @@ class TSPSolver:
 
 		return results
 
+	def getMinEdge(self, edges, route: list, numCities):
+
+		minEdge = (None, np.inf)
+
+		# find the min edge to an unvisited city
+		for currEdge in edges:
+			if currEdge[1] < minEdge[1] and currEdge[0] not in route:
+				minEdge = currEdge
+		if minEdge[1] == np.inf:
+			return None
+
+		return minEdge
+
+	def calcAllEdges(self, cities):
+		# calculate edges between all cities
+		edges = {}
+		for startCity in cities:
+			for endCity in cities:
+				if startCity == endCity:
+					continue
+				cost = startCity.costTo(endCity)
+				if cost != np.inf:
+					if edges.get(startCity) is None:
+						edges.update({startCity: []})
+					edges[startCity].append((endCity, cost))
+		return edges
 	# This algorithm runs in O(n^2 b^n) on average, and has the same space complexity
 	# b represents the average number of states put on to the queue with each expansion
 	# it will expand n times, and for each state it must reduce the cost matrix in O(n^2) time.
@@ -333,76 +406,94 @@ class TSPSolver:
 
 		route = bssf.route
 
+		currBest = copy.deepcopy(bssf)
+
 		#print(costMatrix)
 
-		improvementFound = foundTour
-		numIterationsWithoutSwap = 0
+		numUnchangedSolutions = 0
 
-		while improvementFound:
-			improvementFound = False
+		# I added this outer while loop so that we can continue to loop within the time constraint and keep track of the current bssf
+		# we will break out if we have had 10 solutions that don't help or we run out of time. We can change this number from 10
+		while numUnchangedSolutions < 10 and time.time() - start_time < time_allowance:
+			# After the first solution we are going to swap some random paths to mix it up. This should swap half of them
+			if numUnchangedSolutions > 0:
+				# for i in range(2):
+				for i in range(math.ceil(len(route) / 3)):
+					randA = random.randrange(0, len(route))
+					randB = random.randrange(0, len(route))
+					self.twoOptSwap(route, randA, randB)
+			numIterationsWithoutSwap = 0
+			improvementFound = foundTour
 
-			#self.printRoute(route)
-			for i in range(len(cities)):
-				if numIterationsWithoutSwap >= MAX_ITERATIONS_WITHOUT_SWAP:
-					#break
-					print("OOOPS")
-				numIterationsWithoutSwap += 1
-				# Iterate through all the edges
-				u = route[i]._index
-				#print("\nu: " + str(u), end="  ")
-				if i >= len(route)-1:
-					v = route[0]._index
-					v_route_index = i
-				else:
-					v = route[i+1]._index
-					v_route_index = i
-				#print("v: " + str(v), end="  ")
 
-				for j in range(len(cities)):
+			while improvementFound:
+				improvementFound = False
+
+				#self.printRoute(route)
+				for i in range(len(cities)):
+					if numIterationsWithoutSwap >= MAX_ITERATIONS_WITHOUT_SWAP:
+						#break
+						print("OOOPS")
+					numIterationsWithoutSwap += 1
 					# Iterate through all the edges
-					a_route_index = j
-					a = route[j]._index
-					if a != u and a != v:
-						#print("a: " + str(a), end="  ")
-						if j >= len(route) - 1:
-							b = route[0]._index
-						else:
-							b = route[j + 1]._index
-						#print("b: " + str(b), end="  ")
-						if b != u and b != v:
+					u = route[i]._index
+					#print("\nu: " + str(u), end="  ")
+					if i >= len(route)-1:
+						v = route[0]._index
+						v_route_index = i
+					else:
+						v = route[i+1]._index
+						v_route_index = i
+					#print("v: " + str(v), end="  ")
+					# I changed this from ncities to length of route
+					for j in range(len(route)):
+						# Iterate through all the edges
+						a_route_index = j
+						a = route[j]._index
+						if a != u and a != v:
+							#print("a: " + str(a), end="  ")
+							if j >= len(route) - 1:
+								b = route[0]._index
+							else:
+								b = route[j + 1]._index
+							#print("b: " + str(b), end="  ")
+							if b != u and b != v:
 
-							# Verify that an edge exists from u -> a, backward from a -> v, and from v->b
-							if cities[u].costTo(cities[a]) == np.inf or cities[v].costTo(cities[b]) == np.inf:
-								break
+								# Verify that an edge exists from u -> a, backward from a -> v, and from v->b
+								if cities[u].costTo(cities[a]) == np.inf or cities[v].costTo(cities[b]) == np.inf:
+									break
 
-							temp_route = self.twoOptSwap(route, v_route_index, a_route_index)
-							new_solution = TSPSolution(temp_route)
+								temp_route = self.twoOptSwap(route, v_route_index, a_route_index)
+								new_solution = TSPSolution(temp_route)
 
-							if new_solution.cost < bssf.cost:
-								#print("BSSF UPDATED, old BSSF COST: " + str(bssf.cost))
-								#print("Old Route: ", end="")
-								#self.printRoute(route)
-								total_states += 1
-								bssf = TSPSolution(temp_route)
-								route = temp_route
-								improvementFound = True
-								numIterationsWithoutSwap = 0
-								#print("Swap Completed, new BSSF COST: " + str(bssf.cost))
-								#print("New Route: ", end="")
-								#self.printRoute(route)
+								if new_solution.cost < bssf.cost:
+									#print("BSSF UPDATED, old BSSF COST: " + str(bssf.cost))
+									#print("Old Route: ", end="")
+									#self.printRoute(route)
+									total_states += 1
+									bssf = TSPSolution(temp_route)
+									route = temp_route
+									improvementFound = True
+									numIterationsWithoutSwap = 0
+									#print("Swap Completed, new BSSF COST: " + str(bssf.cost))
+									#print("New Route: ", end="")
+									#self.printRoute(route)
 
-								break
+									break
+					if improvementFound:
 
-				if improvementFound:
-					break
-
-
-		#print(route)
-
-		bssf = TSPSolution(route)
+						break
+			# if this solution is better let's use it
+			bssf = TSPSolution(route)
+			if bssf.cost < currBest.cost:
+				currBest = bssf
+				numUnchangedSolutions = 0
+			else:
+				# if it's not lets increment the amount of solutions we have found that aren't helping
+				numUnchangedSolutions += 1
 
 		end_time = time.time()
-		results['cost'] = bssf.cost if foundTour else math.inf
+		results['cost'] = currBest.cost if foundTour else math.inf
 		results['time'] = end_time - start_time
 		results['count'] = count
 		results['soln'] = bssf
