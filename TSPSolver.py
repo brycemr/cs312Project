@@ -71,6 +71,7 @@ class TSPSolver:
 		count = 0
 		startIndex = 0
 		startCity = cities[startIndex]
+		foundTour = False
 
 
 		start_time = time.time()
@@ -100,6 +101,7 @@ class TSPSolver:
 			# if we've made it back to the starting city, check that we've made a full cycle and everything connects
 			newBSSF = TSPSolution(route)
 			if newBSSF.cost != np.inf and len(route) == numCities:
+				foundTour = True
 				count += 1
 				if bssf is None:
 					bssf = newBSSF
@@ -112,7 +114,7 @@ class TSPSolver:
 
 		end_time = time.time()
 
-		results['cost'] = bssf.cost
+		results['cost'] = bssf.cost if foundTour else math.inf
 		results['time'] = end_time - start_time
 		results['count'] = count
 		results['soln'] = bssf
