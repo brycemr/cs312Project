@@ -36,11 +36,11 @@ class TSPSolver:
 		results = {}
 		cities = self._scenario.getCities()
 		ncities = len(cities)
-		foundTour = False
+		found_tour = False
 		count = 0
 		bssf = None
 		start_time = time.time()
-		while not foundTour and time.time()-start_time < time_allowance:
+		while not found_tour and time.time()-start_time < time_allowance:
 			# create a random permutation
 			perm = np.random.permutation(ncities)
 			route = []
@@ -51,9 +51,9 @@ class TSPSolver:
 			count += 1
 			if bssf.cost < np.inf:
 				# Found a valid route
-				foundTour = True
+				found_tour = True
 		end_time = time.time()
-		results['cost'] = bssf.cost if foundTour else math.inf
+		results['cost'] = bssf.cost if found_tour else math.inf
 		results['time'] = end_time - start_time
 		results['count'] = count
 		results['soln'] = bssf
@@ -71,7 +71,7 @@ class TSPSolver:
 		results = {}
 		cities = self._scenario.getCities()
 		ncities = len(cities)
-		foundTour = True
+		found_tour = True
 		visitedCities = []
 		count = 1
 		start_time = time.time()
@@ -123,11 +123,11 @@ class TSPSolver:
 
 			# If the required num edges have not been found and another cannot be added
 			if next_city == -1:
-				foundTour = False
+				found_tour = False
 				break
 			elif costMatrix[current_city, next_city] == np.inf:
 				# No available route out of this city
-				foundTour = False
+				found_tour = False
 				break
 
 			route.append(cities[next_city])
@@ -175,7 +175,7 @@ class TSPSolver:
 			startCity = cities[startIndex]
 
 		end_time = time.time()
-		results['cost'] = bssf.cost if foundTour else math.inf
+		results['cost'] = bssf.cost if found_tour else math.inf
 
 		results['cost'] = bssf.cost
 		results['time'] = end_time - start_time
@@ -221,7 +221,7 @@ class TSPSolver:
 		results = {}
 		cities = self._scenario.getCities()
 		ncities = len(cities)
-		foundTour = False
+		found_tour = False
 		count = 0
 		total_states = 1
 		pruned_states = 0
@@ -253,7 +253,7 @@ class TSPSolver:
 				bestCost = solution['cost']
 
 		if bssf.cost < np.inf:
-			foundTour = True
+			found_tour = True
 
 		# Reduce the initial cost matrix to create initial state
 		costMatrix, initial_cost = self.reduceCostMatrix(costMatrix, -1, -1)
@@ -313,7 +313,7 @@ class TSPSolver:
 				pruned_states += 1
 
 		end_time = time.time()
-		results['cost'] = bssf.cost if foundTour else math.inf
+		results['cost'] = bssf.cost if found_tour else math.inf
 		results['time'] = end_time - start_time
 		results['count'] = count
 		results['soln'] = bssf
@@ -362,299 +362,147 @@ class TSPSolver:
 
 		return reducedCostMatrix, additionalCost
 
+	# This algorithm runs in O(n^3) as it performs a 2-opt on n different starting routes
+	# the 2-opt requires O(n^2) as it checks every possible swapping of two edges. Resulting in the final
+	# O(n^3) runtime. Space Complexity is O(n) as it is storing and continually updating a route of size n.
+	# When running this in the GUI, you can determine the number of unique starting graphs explored by checking the
+	# num solutions value, pruned states represents the number of times our curr_best route was updated (this is the
+	# best route found between all starting routes). Total states shows the total number of new graphs we created during
+	# the entire runtime.
 	def fancy(self, time_allowance=60.0):
-		print("\n\n BEGINNING FANCY")
 		results = {}
 		cities = self._scenario.getCities()
 		ncities = len(cities)
-		foundTour = False
-		count = 0
-		total_states = 1
+		found_tour = False
+
 		pruned_states = 0
-		max_q_size = 0
-		MAX_ITERATIONS_WITHOUT_SWAP = ncities
-		queue = []
-		curr_time = 0
-
-		costMatrix = np.empty((ncities, ncities))
-
-		# Initialize cost matrix
-		for i in range(ncities):
-			for j in range(ncities):
-				costMatrix[i, j] = cities[i].costTo(cities[j])
+		total_states = 0
 
 		initial_results = self.greedy(time_allowance)
 		bssf = initial_results['soln']
-		bestCost = initial_results['cost']
-
 
 		if bssf.cost < np.inf:
-			foundTour = True
+			found_tour = True
 
 		start_time = time.time()
 
-		route = bssf.route
+		initial_route = bssf.route
+		route = initial_route
+		
+		curr_best = copy.deepcopy(bssf)
 
-		currBest = copy.deepcopy(bssf)
+		num_explored_graphs = 0
 
-		numUnchangedSolutions = 0
-		innerSwaps = 0
-		queue.append(route)
-		prev_improved = True
-		# I added this outer while loop so that we can continue to loop within the time constraint and keep track of the current bssf
-		# we will break out if we have had 10 solutions that don't help or we run out of time. We can change this number from 10
-		while len(queue) > 0 and time.time() - start_time < time_allowance:
-			print("Current Queue Size: " + str(len(queue)))
+		# We terminate if we have explored ncities solutions with different starting routes, or we run out of time.
+		while num_explored_graphs < ncities and time.time() - start_time < time_allowance:
 			# After the first solution we are going to swap some random paths to mix it up. This should swap half of them
-			improvementFound = foundTour
+			num_swaps = 0
+			graphs_explored = []
+			if num_explored_graphs > 0:
+				route = initial_route
+				num_swapsToDo = random.randint(1, math.ceil(len(route)/2))
+				while num_swaps < num_swapsToDo:
+					rand_a = random.randrange(0, len(route))
+					rand_b = random.randrange(0, len(route))
+					
+					# Use rand_a to determine the edge u->v
+					if rand_a == 0:
+						u = route[-1]._index
+					else:
+						u = route[rand_a-1]._index
+					v = route[rand_a]._index
 
-			route = queue.pop(0)
-			bssf = TSPSolution(route)
-			#print("Initial Route: " + str(bssf.cost))
+					# Use rand_b to determine the edge a->b
+					a = route[rand_b]._index
+					if rand_b == len(route)-1:
+						b = route[0]._index
+					else:
+						b = route[rand_b+1]._index
+						
+					# Verify that an edge exists from u -> a, and from v->b
+					if cities[u].costTo(cities[a]) != np.inf and cities[v].costTo(cities[b]) != np.inf and rand_a != rand_b:
+						# Swap edges so u -> a and v -> b
+						temp_route = self.twoOptSwap(route, rand_a, rand_b)
+						new_solution = TSPSolution(temp_route)
+						
+						# Check that the new solution this creates is a valid solution
+						if new_solution.cost != np.inf:
+							route = temp_route
+						num_swaps += 1
+						
+						if new_solution.cost < curr_best.cost:
+							curr_best = new_solution
+					
+					# If we have already used this graph as a starting position shuffle edges again
+					if route in graphs_explored:
+						num_swaps = 0
 
-			while improvementFound:
-				improvementFound = False
-				#self.printRoute(route)
+			graphs_explored.append(route)
+
+			# Initialize the solution, this route forms the initial bssf for this iteration of 2-opt
+			solution = TSPSolution(route)
+			bssf = solution
+			improvement_found = True
+			total_states += 1
+
+			while improvement_found:
+				improvement_found = False
+				
+				# Iterate through all the edges, checking each possible swap
 				for i in range(ncities):
-					#print("\n\n")
-					# Iterate through all the edges
 					u = route[i]._index
-					#print("\nu: " + str(u), end="  ")
-					if i >= len(route)-1:
+					if i >= len(route) - 1:
 						v = route[0]._index
 						v_route_index = 0
 					else:
-						v = route[i+1]._index
-						v_route_index = i+1
-					#print("v: " + str(v), end="  ")
-					# I changed this from ncities to length of route
-					for j in range(ncities):
-						# Iterate through all the edges
-						a_route_index = j
-						a = route[j]._index
-						#print("a: " + str(a), end="  ")
-						if a != u and a != v:
-							if j >= len(route)-1:
-								b = route[0]._index
-							else:
-								b = route[j+1]._index
-							#print("b: " + str(b), end="  ")
-							if b != u and b != v:
-								#print("Checking Edges u:{}, v:{} and a:{}, b:{}".format(u, v, a, b))
-								#print("u{}->a{}:{} and v{}->b{}:{}".format(u, a, cities[u].costTo(cities[a]), v, b, cities[v].costTo(cities[b])))
-								if cities[u].costTo(cities[a]) != np.inf or cities[v].costTo(cities[b]) != np.inf:
-									temp_route = self.twoOptSwap(route, v_route_index, a_route_index)
-									new_solution = TSPSolution(temp_route)
-									#print("Swap Attempted, new cost:{} bssf cost:{} and prev_improved:{}".format(new_solution.cost, bssf.cost, prev_improved))
-									if new_solution.cost < bssf.cost:
-										innerSwaps += 1
-										#print("BSSF UPDATED, old BSSF COST: " + str(bssf.cost))
-										#print("Old Route: ", end="")
-										#self.printRoute(route)
-										total_states += 1
-										bssf = TSPSolution(temp_route)
-										route = temp_route
-										improvementFound = True
-										prev_improved = True
-										#print("Swap Attempted, new cost:{} bssf cost:{} and prev_improved:{}".format(new_solution.cost, bssf.cost, prev_improved))
-										if bssf.cost < currBest.cost:
-											currBest = bssf
-											print("Updating currBest")
+						v = route[i + 1]._index
+						v_route_index = i + 1
 
-										numIterationsWithoutSwap = 0
-										#print("Swap Completed, new BSSF COST: " + str(bssf.cost))
-										#print("New Route: ", end="")
-										#self.printRoute(route)
-
-										# Clear Queue
-										queue = []
-										break
-									elif new_solution.cost == bssf.cost and prev_improved:
-										print("Adding graph to queue swapping u:{}, v:{} and a:{}, b:{}".format(u, v, a, b))
-										queue.append(route)
-
-					if improvementFound:
-						break
-					elif i == len(cities)-1:
-						print("Setting prev_improved False")
-						prev_improved = False
-
-			# if this solution is better let's use it
-			bssf = TSPSolution(route)
-			if bssf.cost < currBest.cost:
-				#print("Updating CurrBest below")
-				currBest = bssf
-				numUnchangedSolutions = 0
-			else:
-				# if it's not lets increment the amount of solutions we have found that aren't helping
-				#print("Performed " + str(innerSwaps) + " inner swaps")
-				#print("best route found: " + str(bssf.cost) + "\n")
-				innerSwaps = 0
-				numUnchangedSolutions += 1
-
-		end_time = time.time()
-		results['cost'] = currBest.cost if foundTour else math.inf
-		results['time'] = end_time - start_time
-		results['count'] = count
-		results['soln'] = currBest
-		results['max'] = None
-		results['total'] = total_states
-		results['pruned'] = None
-
-		return results
-
-
-	def fancy2(self, time_allowance=60.0):
-		print("\n\n BEGINNING FANCY2")
-		results = {}
-		cities = self._scenario.getCities()
-		ncities = len(cities)
-		foundTour = False
-		count = 0
-		total_states = 1
-		pruned_states = 0
-		max_q_size = 0
-		MAX_ITERATIONS_WITHOUT_SWAP = ncities
-
-		curr_time = 0
-
-		costMatrix = np.empty((ncities, ncities))
-
-		# Initialize cost matrix
-		for i in range(ncities):
-			for j in range(ncities):
-				costMatrix[i, j] = cities[i].costTo(cities[j])
-
-		initial_results = self.greedy(time_allowance)
-		bssf = initial_results['soln']
-		bestCost = initial_results['cost']
-
-
-		if bssf.cost < np.inf:
-			foundTour = True
-
-		start_time = time.time()
-
-		route = bssf.route
-
-		currBest = copy.deepcopy(bssf)
-
-		numUnchangedSolutions = 0
-		innerSwaps = 0
-
-		# I added this outer while loop so that we can continue to loop within the time constraint and keep track of the current bssf
-		# we will break out if we have had 10 solutions that don't help or we run out of time. We can change this number from 10
-		while numUnchangedSolutions < 10 and time.time() - start_time < time_allowance:
-			# After the first solution we are going to swap some random paths to mix it up. This should swap half of them
-			numSwaps = 0
-
-			if numUnchangedSolutions > 0:
-				for i in range(math.ceil(len(route) / 3)): #MAYBE CHANGE TO WHILE LOOP? GO UNTIL WE HIT # SWAPS WE WANT
-					randA = random.randrange(0, len(route))
-					randB = random.randrange(0, len(route))
-					# if swapping edges u->v and a->b put route index of node v and route index of node a into twoOptSwap
-					if randA == 0:
-						u = route[-1]._index
-					else:
-						u = route[randA-1]._index
-					v = route[randA]._index
-					a = route[randB]._index
-					if randB == len(route)-1:
-						b = route[0]._index
-					else:
-						b = route[randB+1]._index
-					# Verify that an edge exists from u -> a, and from v->b
-					if cities[u].costTo(cities[a]) != np.inf and cities[v].costTo(cities[b]) != np.inf and randA != randB:
-						temp_route = self.twoOptSwap(route, randA, randB)
-						#print("Swapped v:{} and a:{}".format(randA, randB))
-						new_solution = TSPSolution(temp_route)
-						if new_solution.cost != np.inf:
-							route = temp_route
-						numSwaps += 1
-
-						if new_solution.cost < currBest.cost:
-							#print("Updating CurrBest above")
-							currBest = new_solution
-			#print("Performed " + str(numSwaps) + " initial swaps")
-			#self.printRoute(route)
-			solution = TSPSolution(route)
-			bssf = solution
-			improvementFound = foundTour
-			#print("Initial Route: " + str(solution.cost))
-			while improvementFound:
-				improvementFound = False
-				#self.printRoute(route)
-				for i in range(ncities):
-					# Iterate through all the edges
-					u = route[i]._index
-					#print("\nu: " + str(u), end="  ")
-					if i >= len(route)-1:
-						v = route[0]._index
-						v_route_index = i
-					else:
-						v = route[i+1]._index
-						v_route_index = i
-					#print("v: " + str(v), end="  ")
-					# I changed this from ncities to length of route
 					for j in range(ncities):
 						# Iterate through all the edges
 						a_route_index = j
 						a = route[j]._index
 						if a != u and a != v:
-							#print("a: " + str(a), end="  ")
 							if j >= len(route) - 1:
 								b = route[0]._index
 							else:
 								b = route[j + 1]._index
-							#print("b: " + str(b), end="  ")
 							if b != u and b != v:
-								if cities[u].costTo(cities[a]) != np.inf and cities[v].costTo(cities[b]) != np.inf:
+								# Verify that the edges we are trying to swap have edges between them
+								if cities[u].costTo(cities[a]) != np.inf or cities[v].costTo(cities[b]) != np.inf:
 									temp_route = self.twoOptSwap(route, v_route_index, a_route_index)
 									new_solution = TSPSolution(temp_route)
-									#print("Swap Attempted, new cost:{} bssf cost:{}".format(new_solution.cost, bssf.cost))
+
 									if new_solution.cost < bssf.cost:
-										innerSwaps += 1
-										#print("BSSF UPDATED, old BSSF COST: " + str(bssf.cost))
-										#print("Old Route: ", end="")
-										#self.printRoute(route)
-										total_states += 1
 										bssf = TSPSolution(temp_route)
 										route = temp_route
-										improvementFound = True
-										if bssf.cost < currBest.cost:
-											currBest = bssf
-											#print("Updating currBest")
-										numIterationsWithoutSwap = 0
-										#print("Swap Completed, new BSSF COST: " + str(bssf.cost))
-										#print("New Route: ", end="")
-										#self.printRoute(route)
+										improvement_found = True
+										total_states += 1
+										if bssf.cost < curr_best.cost:
+											curr_best = bssf
+											pruned_states += 1
+
+										# We found an improved graph, so restart 2-opt
 										break
 
-					if improvementFound:
+					if improvement_found:
 						break
-			# if this solution is better let's use it
-			bssf = TSPSolution(route)
-			if bssf.cost < currBest.cost:
-				#print("Updating CurrBest below")
-				currBest = bssf
-				numUnchangedSolutions = 0
-			else:
-				# if it's not lets increment the amount of solutions we have found that aren't helping
-				#print("Performed " + str(innerSwaps) + " inner swaps")
-				#print("best route found: " + str(bssf.cost) + "\n")
-				innerSwaps = 0
-				numUnchangedSolutions += 1
+
+			num_explored_graphs += 1
 
 		end_time = time.time()
-		results['cost'] = currBest.cost if foundTour else math.inf
+		results['cost'] = curr_best.cost if found_tour else math.inf
 		results['time'] = end_time - start_time
-		results['count'] = count
-		results['soln'] = currBest
+		results['count'] = num_explored_graphs
+		results['soln'] = curr_best
 		results['max'] = None
 		results['total'] = total_states
-		results['pruned'] = None
+		results['pruned'] = pruned_states
 
 		return results
+
+	# This method has O(n) runtime and space complexity, as it creates a new list representing the route by appending
+	# n city indices in a given order.
 	def twoOptSwap(self, route, v, wo):
 		#print("Swapping from " + str(v) + " to " + str(wo))
 		newRoute = []
